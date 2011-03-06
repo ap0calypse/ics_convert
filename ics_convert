@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+use strict;
+ 
+# project:      ics_convert
+# usage:        ./ics_convert <inputfile>
+# function:     converts a calendar-output from ICS-format to plain-text
+# author:       Manuel Fill (ap0calypse@agitatio.org)
+# license:      as usual, if not defined differently, it's GPL. 
+ 
+# search for the input-file, otherwise use input.ics
+my $INFILE = shift || "input.ics";
+unless (-f $INFILE) {
+     print "You didn't specify a valid input file!\n";
+     exit 1;
+}
+ 
+# prepare the needed data structures
+my ($cal_hash, @dates);
+ 
+# open input file
+open my $FH, "< $INFILE" or die "Can't open file $INFILE, "
+           . "please check permissions!";
+ 
+my ($run, $switch) = (0, 0);
+ 
+# go through the file line by line
+while (my $line = <$FH>) {
+ 
+# do a dos2unix because of some crappy windows-output
+    $line =~ s/\r\n/\n/;
+ 
+# if we encounter an event, turn on the switch and increment the run-counter
+    if ($line =~ m/BEGIN:VEVENT/) {
+        $run++;
+        $switch = 1;
+    }
+ 
+# if we encounter the end, switch off
+    if ($line =~ m/END:VEVENT/) {
+        $switch = 0;
+    }
+ 
+# fill up the hash
+    if ($switch == 1) {
+        if ($line =~ m/^.*SUMMARY:(.+)$/) {
+            $cal_hash->{$run}->{'name'} = $1;
+        }
+        if ($line =~ m/^.*DTSTART:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2}).*$/) {
+            $cal_hash->{$run}->{'dtstart'} = "$1-$2-$3 $4:$5";
+            $cal_hash->{$run}->{'tmstart'} = "$4:$5";
+            push @dates, (split / /, $cal_hash->{$run}->{'dtstart'})[0];
+        }
+        if ($line =~ m/^.*DTEND:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2}).*$/) {
+            $cal_hash->{$run}->{'dtend'} = "$1-$2-$3 $4:$5";
+            $cal_hash->{$run}->{'tmend'} = "$4:$5";
+        }
+        if ($line =~ m/^.*LOCATION:(.+)$/) {
+            $cal_hash->{$run}->{'loc'} = $1;
+        }
+ 
+    }
+}
+close $FH;
+ 
+# print the output in a readable format
+for my $date (sort @dates) {
+    print $date, "\n";
+    for (keys %{$cal_hash}) {
+        if ($cal_hash->{$_}{'dtstart'} =~ m/.*$date.*/) {
+            chomp ($cal_hash->{$_}{'name'});
+            print " + " . $cal_hash->{$_}{'name'} . " [ " . 
+                  $cal_hash->{$_}{'loc'} . 
+                  " ]\n '-> ( " . $cal_hash->{$_}{'tmstart'} . 
+                  " - " . $cal_hash->{$_}{'tmend'} . " )\n";
+        }
+    }
+}
